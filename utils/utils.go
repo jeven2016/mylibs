@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"image"
 	"math/rand"
+	"net/url"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -60,4 +62,14 @@ func ValidJpgImage(jpgPath string) (valid bool, err error) {
 	}
 
 	return true, err
+}
+
+func GetFileExtFromUrl(urlPath string) (string, error) {
+	parsedURL, err := url.Parse(urlPath)
+	if err != nil {
+		return "", err
+	}
+	filename := filepath.Base(parsedURL.Path)
+	ext := filepath.Ext(filename)
+	return ext, nil
 }

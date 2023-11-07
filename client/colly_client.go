@@ -35,9 +35,10 @@ func NewCollector(httpProxy string, maxRetries int) (c *colly.Collector, err err
 		Proxy:                 http.ProxyFromEnvironment, //从环境变量获取http proxy地址
 	}
 
+	var proxyUrl *url.URL
 	//set http proxy
 	if httpProxy != "" {
-		proxyUrl, err := url.Parse(httpProxy)
+		proxyUrl, err = url.Parse(httpProxy)
 		if err != nil {
 			return
 		}
