@@ -22,20 +22,17 @@ type StartupParams struct {
 	PostShutdown  func() error
 }
 
-func Startup(params *StartupParams) *System {
+func Startup(ctx context.Context, params *StartupParams) *System {
 	// 创建一个全局的App
 	sys := &System{}
 	sys.Config = params.Config
 
-	ctx := context.Background()
-	sc := params.Config.GetServerConfig()
-
 	// log初始化
-	log.SetupLog(sc.ApplicationName, sc.LogSetting)
+	log.SetupLog(params.Config.ApplicationName, params.Config.LogSetting)
 
 	if params.EnableRedis {
 		// 初始化redis
-		redisClient, err := cache.NewRedis(sc.Redis)
+		redisClient, err := cache.NewRedis(params.Config.Redis)
 		if err != nil {
 			zap.L().Error("failed to initialize for redis", zap.Error(err))
 			shutdown(ctx, sys, params)
@@ -48,7 +45,7 @@ func Startup(params *StartupParams) *System {
 
 	if params.EnableMongodb {
 		// 初始化Mongodb
-		if mongoClient, err := db.NewMongo(sc.Mongo); err != nil {
+		if mongoClient, err := db.NewMongo(params.Config.Mongo); err != nil {
 			zap.L().Error("failed to connect mongodb", zap.Error(err))
 			shutdown(ctx, sys, params)
 			return nil
@@ -59,7 +56,7 @@ func Startup(params *StartupParams) *System {
 	}
 
 	//init a routine pool
-	pool, err := ants.NewPool(sc.TaskPoolSetting.Capacity)
+	pool, err := ants.NewPool(params.Config.TaskPoolSetting.Capacity)
 	if err != nil {
 		zap.L().Error("unable to init a routine pool", zap.Error(err))
 		shutdown(ctx, sys, params)
@@ -71,12 +68,12 @@ func Startup(params *StartupParams) *System {
 
 	if params.EnableEtcd {
 		//submit a task to register this service
-		if err = sys.RegisterService(sc); err != nil {
-			zap.L().Error("failed to register service in etcd", zap.String("app", sc.ApplicationName), zap.Error(err))
+		if err = sys.RegisterService(params.Config); err != nil {
+			zap.L().Error("failed to register service in etcd", zap.String("app", params.Config.ApplicationName), zap.Error(err))
 			shutdown(ctx, sys, params)
 			return nil
 		} else {
-			zap.L().Info("service registered in etcd", zap.String("app", sc.ApplicationName))
+			zap.L().Info("service registered in etcd", zap.String("app", params.Config.ApplicationName))
 		}
 	}
 
@@ -103,6 +100,7 @@ func shutdown(ctx context.Context, sys *System, params *StartupParams) {
 	zap.L().Info("server is shutting down")
 
 	if params.PreShutdown != nil {
+		zap.S().Warn("call PreShutdown hook before exiting")
 		if err := params.PreShutdown(); err != nil {
 			zap.L().Warn("an error occurs while calling shutdown hook", zap.Error(err))
 		}
@@ -111,12 +109,16 @@ func shutdown(ctx context.Context, sys *System, params *StartupParams) {
 	if sys.RedisClient != nil {
 		if err := sys.RedisClient.Client.Close(); err != nil {
 			zap.L().Warn("an error occurs while closing redis's connection", zap.Error(err))
+		} else {
+			zap.S().Info("redis connections closed")
 		}
 	}
 
 	if sys.MongoClient != nil {
 		if err := sys.MongoClient.Client.Disconnect(ctx); err != nil {
 			zap.L().Warn("an error occurs while closing mongodb's connection", zap.Error(err))
+		} else {
+			zap.S().Info("mongodb connections closed")
 		}
 	}
 
@@ -127,14 +129,17 @@ func shutdown(ctx context.Context, sys *System, params *StartupParams) {
 	//		}
 	//	}
 	//}
+	//
 	if sys.TaskPool != nil {
 		sys.TaskPool.Release()
+		zap.S().Info("task pool released")
 	}
 
-	zap.L().Info("shutdown completes")
 	if params.PostShutdown != nil {
+		zap.S().Info("call post shutdown hook before exiting")
 		if err := params.PostShutdown(); err != nil {
 			zap.L().Warn("an error occurs while calling post shutdown hook", zap.Error(err))
 		}
 	}
+	zap.L().Info("shutdown completed")
 }
