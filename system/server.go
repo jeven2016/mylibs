@@ -92,6 +92,18 @@ func Startup(ctx context.Context, params *StartupParams) *System {
 		zap.L().Info("unable to submit a shutdown hook", zap.Error(err))
 		return nil
 	}
+
+	if err = sys.TaskPool.Submit(func() {
+		for {
+			select {
+			case <-ctx.Done():
+				zap.S().Info("context is canceled")
+				shutdown(ctx, sys, params)
+			}
+		}
+	}); err != nil {
+		zap.L().Info("unable to submit a shutdown hook", zap.Error(err))
+	}
 	SetSystem(sys)
 	return sys
 }
