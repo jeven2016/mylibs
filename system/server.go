@@ -10,8 +10,12 @@ import (
 	"go.uber.org/zap"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 )
+
+var closed bool
+var closeLock sync.Mutex
 
 type StartupParams struct {
 	EnableMongodb bool
@@ -94,13 +98,9 @@ func Startup(ctx context.Context, params *StartupParams) *System {
 	}
 
 	if err = sys.TaskPool.Submit(func() {
-		for {
-			select {
-			case <-ctx.Done():
-				zap.S().Info("context is canceled")
-				shutdown(ctx, sys, params)
-			}
-		}
+		<-ctx.Done()
+		zap.S().Info("context is canceled")
+		shutdown(ctx, sys, params)
 	}); err != nil {
 		zap.L().Info("unable to submit a shutdown hook", zap.Error(err))
 	}
@@ -109,6 +109,13 @@ func Startup(ctx context.Context, params *StartupParams) *System {
 }
 
 func shutdown(ctx context.Context, sys *System, params *StartupParams) {
+	closeLock.Lock()
+	defer closeLock.Unlock()
+
+	if closed {
+		return
+	}
+
 	zap.L().Info("server is shutting down")
 
 	if params.PreShutdown != nil {
