@@ -110,7 +110,10 @@ func Startup(ctx context.Context, params *StartupParams) *System {
 
 func shutdown(ctx context.Context, sys *System, params *StartupParams) {
 	closeLock.Lock()
-	defer closeLock.Unlock()
+	defer func() {
+		closed = true
+		closeLock.Unlock()
+	}()
 
 	if closed {
 		return
