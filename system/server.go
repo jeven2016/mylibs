@@ -84,11 +84,12 @@ func Startup(ctx context.Context, params *StartupParams) *System {
 	zap.L().Info("server started successfully")
 	exitChan := make(chan os.Signal)
 
+	// kill (no param) default send syscanll.SIGTERM
+	// kill -2 is syscall.SIGINT
+	// kill -9 is syscall. SIGKILL but can't be caught, so don't need to add it
+	signal.Notify(exitChan, syscall.SIGTERM, syscall.SIGINT)
+
 	err = sys.TaskPool.Submit(func() {
-		// kill (no param) default send syscanll.SIGTERM
-		// kill -2 is syscall.SIGINT
-		// kill -9 is syscall. SIGKILL but can't be caught, so don't need to add it
-		signal.Notify(exitChan, syscall.SIGTERM, syscall.SIGINT)
 		<-exitChan
 		shutdown(ctx, sys, params)
 	})
