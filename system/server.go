@@ -2,6 +2,7 @@ package system
 
 import (
 	"context"
+	"errors"
 	"github.com/jeven2016/mylibs/cache"
 	"github.com/jeven2016/mylibs/config"
 	"github.com/jeven2016/mylibs/db"
@@ -26,17 +27,36 @@ type StartupParams struct {
 	PostShutdown  func() error
 }
 
+func (s *StartupParams) Validate() error {
+	if s.Config == nil {
+		return errors.New("start server failed: params and params.Config must be set")
+	}
+	if s.Config.ApplicationName == "" {
+		return errors.New("start server failed: application name is required")
+	}
+	return nil
+}
+
 func Startup(ctx context.Context, params *StartupParams) *System {
+	if params == nil {
+		panic("start server failed: the params in method Startup(ctx, params) is required")
+	}
+
+	if err := params.Validate(); err != nil {
+		panic(err.Error())
+	}
+
 	// 创建一个全局的App
 	sys := &System{}
 	sys.Config = params.Config
+	sys.startupParams = params
 
 	// log初始化
 	log.SetupLog(params.Config.ApplicationName, params.Config.LogSetting)
 
 	if params.EnableRedis {
 		// 初始化redis
-		redisClient, err := cache.NewRedis(params.Config.Redis)
+		redisClient, err := cache.NewRedis(ctx, params.Config.Redis)
 		if err != nil {
 			zap.L().Error("failed to initialize for redis", zap.Error(err))
 			shutdown(ctx, sys, params)
@@ -49,7 +69,7 @@ func Startup(ctx context.Context, params *StartupParams) *System {
 
 	if params.EnableMongodb {
 		// 初始化Mongodb
-		if mongoClient, err := db.NewMongo(params.Config.Mongo); err != nil {
+		if mongoClient, err := db.NewMongo(ctx, params.Config.Mongo); err != nil {
 			zap.L().Error("failed to connect mongodb", zap.Error(err))
 			shutdown(ctx, sys, params)
 			return nil
@@ -81,7 +101,7 @@ func Startup(ctx context.Context, params *StartupParams) *System {
 		}
 	}
 
-	zap.L().Info("server started successfully")
+	zap.L().Info("server starts successfully")
 	exitChan := make(chan os.Signal)
 
 	// kill (no param) default send syscanll.SIGTERM
@@ -107,6 +127,10 @@ func Startup(ctx context.Context, params *StartupParams) *System {
 	}
 	SetSystem(sys)
 	return sys
+}
+
+func Stop(ctx context.Context) {
+	shutdown(ctx, GetSystem(), GetSystem().startupParams)
 }
 
 func shutdown(ctx context.Context, sys *System, params *StartupParams) {

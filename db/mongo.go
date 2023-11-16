@@ -15,9 +15,9 @@ type Mongo struct {
 	Config *config.MongoConfig
 }
 
-func NewMongo(config *config.MongoConfig) (*Mongo, error) {
+func NewMongo(ctx context.Context, config *config.MongoConfig) (*Mongo, error) {
 	var mg Mongo
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
 	// 连接MongoDB

@@ -20,7 +20,7 @@ type Redis struct {
 	config *config.RedisConfig
 }
 
-func NewRedis(redisCfg *config.RedisConfig) (*Redis, error) {
+func NewRedis(ctx context.Context, redisCfg *config.RedisConfig) (*Redis, error) {
 	client := redis.NewClient(&redis.Options{
 		Addr:         redisCfg.Address,
 		Password:     redisCfg.Password,
@@ -31,7 +31,6 @@ func NewRedis(redisCfg *config.RedisConfig) (*Redis, error) {
 		PoolSize:     redisCfg.PoolSize,
 		PoolTimeout:  time.Duration(redisCfg.PoolTimeout) * time.Second,
 	})
-	ctx := context.Background()
 	if _, err := client.Ping(ctx).Result(); err != nil {
 		return nil, err
 	}
@@ -111,7 +110,6 @@ func (rd *Redis) Consume(ctx context.Context, streamName string,
 	consumerId := streamName + ":consumer:" + prefix
 loop:
 	for {
-
 		select {
 		case <-ctx.Done():
 			zap.S().Info("stop fetching while context canceled ")
@@ -129,12 +127,15 @@ loop:
 				zap.S().Errorf("failed to handle XReadGroup, %v", err)
 				return err
 			}
+
+			//如果系统退出，此处chan中的已经Ack过的消息将无法保证正确处理，会出现丢失 todo enhancement
 			for i := 0; i < len(entries[0].Messages); i++ {
 				messageID := entries[0].Messages[i].ID
 				jsonData := entries[0].Messages[i].Values[RedisStreamDataVar]
 				msgChan <- jsonData
 				zap.L().Info("retrieve a message into channel")
-				rd.Client.XAck(context.Background(), streamName, consumerGroup, messageID)
+
+				rd.Client.XAck(ctx, streamName, consumerGroup, messageID)
 			}
 		}
 	}

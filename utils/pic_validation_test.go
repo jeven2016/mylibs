@@ -9,7 +9,7 @@ import (
 )
 
 func TestPicValidation(t *testing.T) {
-	path := "/mnt/files/comic/cartoon18/哥哥的秘书/cover.jpg"
+	path := "/mnt/files/comic/cartoon18/hello/cover.jpg"
 	valid, err := ValidJpgImage(path)
 	if err != nil {
 		t.Fatal(err)

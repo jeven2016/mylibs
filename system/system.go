@@ -25,6 +25,8 @@ type System struct {
 	TaskPool *ants.Pool
 
 	collectionMap map[string]*mongo.Collection
+
+	startupParams *StartupParams
 }
 
 func (s *System) RegisterService(cfg *config.ServerConfig) error {
